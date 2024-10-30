@@ -22,6 +22,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if dialog.mode == 'gpt':
         await gpt_dialod(update, context)
+    elif dialog.mode == 'talk':
+        await talk_dialog(update, context)
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
 
@@ -60,6 +62,33 @@ async def gpt_dialod(update: Update, contex: ContextTypes.DEFAULT_TYPE):
     answer = await chat_gpt.add_message(text)
     await message.edit_text(answer)
 
+async def talk(update: Update, context:ContextTypes.DEFAULT_TYPE):
+    dialog.mode = 'talk'
+    message = load_message('talk')
+    await send_image(update, context, 'talk')
+    await send_text_buttons(update, context, message, {
+        'talk_cobain': 'Курт Кобейн',
+        'talk_queen': 'Елизавета II',
+        'talk_tolkien': 'Джон Толкиен',
+        'talk_nietzsche': 'Фридрих Ницше',
+        'talk_hawking': 'Стивен Хокинг'
+    })
+
+async def talk_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    cb = update.callback_query.data
+    prompt = load_prompt(cb)
+    chat_gpt.set_prompt(prompt)
+    answer = await chat_gpt.send_question(prompt, '')
+    await send_image(update, context, cb)
+    await send_text(update, context, answer)
+
+async def talk_dialog(update: Update, contex: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
+    message = await send_text(update, contex, 'Думаю над вопросом...')
+    answer = await chat_gpt.add_message(text)
+    await message.edit_text(answer)
+
 
 
 dialog = Dialog()
@@ -71,8 +100,10 @@ app = ApplicationBuilder().token("7602773018:AAF8N9lotSt3aNp-ESFG26hmYCWn5uGeln4
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("random", random))
 app.add_handler(CommandHandler("gpt", gpt))
+app.add_handler(CommandHandler("talk", talk))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
 
 app.add_handler(CallbackQueryHandler(random_button, pattern='^random_.*'))
+app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*'))
 app.add_handler(CallbackQueryHandler(default_callback_handler))
 app.run_polling()
