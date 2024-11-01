@@ -24,6 +24,8 @@ async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await gpt_dialod(update, context)
     elif dialog.mode == 'talk':
         await talk_dialog(update, context)
+    elif dialog.mode == 'quiz':
+        await quiz_dialog(update, context)
     else:
         await context.bot.send_message(chat_id=update.effective_chat.id, text=update.message.text)
 
@@ -37,16 +39,16 @@ async def random(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # await message.edit_text(answer)
     await send_text_buttons(update, context, answer, {
         'random_more': 'Хочу еще рандомный факт',
-        'random_end': 'Выйти из режима GPT'
+        'random_end': 'Выйти'
     })
 
 async def random_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.callback_query.answer()
     cb = update.callback_query.data
     if cb == 'random_more':
-        await send_text(update, context, 'Нажмите /random')
+        await random(update, context)
     else:
-        await send_text(update, context, 'Нажмите /start')
+        await start(update, context)
 
 async def gpt(update: Update, contex: ContextTypes.DEFAULT_TYPE):
     dialog.mode = 'gpt'
@@ -89,6 +91,53 @@ async def talk_dialog(update: Update, contex: ContextTypes.DEFAULT_TYPE):
     answer = await chat_gpt.add_message(text)
     await message.edit_text(answer)
 
+async def quiz(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    dialog.mode = 'quiz'
+    if not context.user_data:
+        context.user_data['current_mode'] = None
+        context.user_data['quiz'] = None
+        context.user_data['count'] = 0
+    message = load_message('quiz')
+    await send_image(update, context, 'quiz')
+    await send_text_buttons(update, context, message, {
+        'quiz_prog': 'Программирование на Python',
+        'quiz_math': 'Математические теории',
+        'quiz_biology': 'Биология'
+    })
+
+
+async def quiz_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.callback_query.answer()
+    prompt = load_prompt('quiz')
+    cb = update.callback_query.data
+    if cb == 'quiz_more':
+        cb = context.user_data['current_mode']
+    elif cb == 'quiz_exit':
+        await send_text(update, context, f'Правильных ответов: {context.user_data['count']}')
+        context.user_data['current_mode'] = None
+        context.user_data['quiz'] = None
+        context.user_data['count'] = 0
+        await start(update, context)
+        return
+    else:
+        context.user_data['current_mode'] = cb
+    answer = await chat_gpt.send_question(prompt, cb)
+    await send_text(update, context, answer)
+    context.user_data['quiz'] = 'next'
+
+async def quiz_dialog(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.user_data['current_mode'] or not context.user_data['quiz']:
+        return
+    context.user_data['quiz'] = None
+    text = update.message.text
+    answer = await chat_gpt.add_message(text)
+    if answer == 'Правильно!':
+        context.user_data['count'] += 1
+    await send_text_buttons(update, context, answer, {
+        'quiz_more': 'Следующий вопрос',
+        'quiz_exit': 'Завершить'
+    })
+
 
 
 dialog = Dialog()
@@ -101,9 +150,11 @@ app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("random", random))
 app.add_handler(CommandHandler("gpt", gpt))
 app.add_handler(CommandHandler("talk", talk))
+app.add_handler(CommandHandler("quiz", quiz))
 app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), echo))
 
 app.add_handler(CallbackQueryHandler(random_button, pattern='^random_.*'))
 app.add_handler(CallbackQueryHandler(talk_button, pattern='^talk_.*'))
+app.add_handler(CallbackQueryHandler(quiz_button, pattern='^quiz_.*'))
 app.add_handler(CallbackQueryHandler(default_callback_handler))
 app.run_polling()
